@@ -1,7 +1,15 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <dlfcn.h>
+
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
+
+#define CHECK_DLERROR(ptr) do\
+	if(!ptr){\
+		fprintf(stderr, "%s\n", dlerror());\
+		exit(1);\
+	} while (0)
 
 enum keys {
 	LEFT,
@@ -14,22 +22,20 @@ enum keys {
 	ESCAPE,
 };
 
-/* api */
-extern void init();
-extern void loop();
-
 /* global data */
-char pixels[256*256];
+unsigned char pixels[256*256];
 unsigned char input;
 
-void show_FPS(unsigned iter){
+float FPS;
+
+void update_FPS(unsigned iter){
 	static unsigned oldtime;
 	static unsigned newtime;
 
 	if(iter%64 == 0){
 		oldtime = newtime;
 		newtime = SDL_GetTicks();
-		fprintf(stderr,"fps %.3f  \r", 1000.0/((newtime-oldtime)/64.0));
+		FPS = 1000.0/((newtime-oldtime)/64.0);
 	}
 }
 
@@ -117,7 +123,7 @@ int get_events(void){
 	return 1;
 }
 
-int main(){
+int main(int argc, char *argv[]){
 	// init
 	SDL_Init( SDL_INIT_EVERYTHING );
 	SDL_Window *window = SDL_CreateWindow("test", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 256, 256, 0);
@@ -126,7 +132,21 @@ int main(){
 	
 	SDL_Rect rect = {.x=0,.y=0,.w=256,.h=256};
 	
-	init();
+	if(argc != 2){
+		fprintf(stderr, "Usage: %s ./file.so\n", argv[0]);
+		exit(1);
+	}
+	
+	void *handle = dlopen(argv[1], RTLD_LAZY);
+	CHECK_DLERROR(handle);
+
+	void (*init)(unsigned char*, unsigned char*) = dlsym(handle, "init");
+	CHECK_DLERROR(init);
+
+	void (*loop)() = dlsym(handle, "loop");
+	CHECK_DLERROR(loop);
+
+	init((unsigned char*)&pixels, &input);
 
 	void *pix;
 	int pitch;
@@ -142,11 +162,11 @@ int main(){
 	unsigned iter = 0;
 	int cont = 1;
 	while(cont) {
-//		show_FPS(iter++);
+		update_FPS(iter);
 
 		cont = get_events();
 		
-		fprintf(stderr,"input %3u \r", (unsigned) input);
+		fprintf(stderr,"input %3u, FPS %3.3f\r", (unsigned) input, FPS);
 
 		loop();
 
@@ -157,6 +177,8 @@ int main(){
 		SDL_RenderCopy(renderer, texture, &rect, &rect);
 		SDL_RenderPresent(renderer);
 		SDL_RenderClear(renderer);
+
+		iter++;
 	}
 
 	// finish

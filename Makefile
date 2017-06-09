@@ -1,6 +1,14 @@
-LDLIBS ?= -lSDL2  -lSDL2_image
-CFLAGS ?= -Wall -Wextra
+LDLIBS ?= -lSDL2  -lSDL2_image -ldl
+CFLAGS ?= -Wall -Wextra -fPIC
 
-all: test
+all: ob clib.so
 
-test: core.o clib.c
+%.so: %.o
+	$(CC) $(LDFLAGS) -shared -o $@ $^ $(LDLIBS)
+
+ob: ob.o
+
+clib.so:
+
+clean:
+	-$(RM) *.o *.so ob
